@@ -1,0 +1,301 @@
+
+
+
+Design and Implementation of a Secure Amazon S3 Based File System
+
+
+
+
+
+
+James Farr
+April 20, 2019
+CSC 4420
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Contents
+Introduction	3
+Project Goals	3
+Create an Amazon S3 bucket	3
+Mount your S3 bucket in Ubuntu	3
+Seamless updates between local and S3 bucket	3
+Implement RC4 encryption	3
+System Information	3
+Ubuntu	3
+Software	4
+Tools and Packages	4
+Design	4
+fdcache.cpp	5
+Integration	5
+Mounting the bucket	5
+Implementing automount	6
+Getting my bucket to talk with S3	6
+Implementing the RC4 encryption	9
+What went wrong?	10
+Implementation Details	10
+New include	10
+My code	10
+What exactly does my code do?	10
+Code Changes	11
+Where I think my call was needed	12
+Future Improvement	13
+Summary	13
+
+
+
+
+
+Introduction
+In this report I will be talking about the following topics:
+•	The project goals: An overall goal of the project and end result.
+•	System information: An overview of the technology and software that I used to complete my project.
+•	Tools and packages: An overview of any tools and packages that I used for the project.
+•	Design: A brief overview of the design of the project.
+•	Integration: An overview of how I was able to accomplish what I did, as well as talk about what went wrong.
+•	Implementation details: Highlights and description of the code that I modified and why I modified it.
+•	Future improvement: What could I have accomplished if I had more time.
+•	Summary: What did I learn during this project.
+
+Project Goals
+Create an Amazon S3 bucket
+	The first thing that needed to be done for this project is to go onto Amazon S3 and create a bucket. This step is straightforward because Amazon provides step-by-step instruction on how to create your bucket and where to go from there. 
+Mount your S3 bucket in Ubuntu
+	The second thing that needed to happen is mounting your bucket in your Ubuntu system. This is the first of the major hurdles for the project because it involved a bit more digging around wiki’s and git repositories to figure out everything you need to do. During this step you will need to make sure that you start downloading all necessary software to make things seamless.
+Seamless updates between local and S3 bucket
+	Your bucket should be set up in a way that you will have seamless updates between your local machine and your S3 bucket. This means that if you add, delete, or modify any files on your local machine, those same changes will take place on the S3 bucket, and vice versa. 
+Implement RC4 encryption
+	The final goal of the project is to implement an RC4 encryption. This means that all files in the file system will automatically get encrypted using RC4, and applications will be able to operate on the files without the need for explicit decryption.
+
+System Information
+Ubuntu
+All work for this project was done using an Asus Zenbook running Ubuntu 18.04 through Oracle VM VirtualBox.
+System Information for Ubuntu:
+•	OS: Ubuntu 18.04.1 LTS x86_64
+•	Host: VirtualBox 1.2
+•	CPU: Intel i7-8550U @ 1.992GHz
+•	GPU: Intel UHD Graphics 620
+•	Memory: 5.8GiB
+•	Disk: 10.5GB
+Software
+•	S3FS version 1.85
+•	OpenSSL version 1.10g 
+
+Tools and Packages
+The list of tools used during this project are:
+•	Oracle VM VirtualBox: a tool that allowed me to run Ubuntu without having to install it as either a dual boot or as my main operating system.
+•	Amazon S3: Amazon S3 provided the bucket to be able to transfer and store data.
+•	S3FS Fuse: a tool that allowed me to mount my Amazon S3 bucket onto Ubuntu.
+•	OpenSSL: provided that necessary code to be able to implement the RC4 encryption and decryption to the project.
+
+Design
+Overall, I don’t completely understand how this program is set up. The way that it’s setup as I understand it is:
+•	Amazon S3 is located online.
+•	S3FS acts as a go between for Amazon S3 and our locally created bucket.
+•	The code I added for RC4 is supposed to go into effect anytime there is any form of transfer going on between the Amazon S3 server and the local bucket.
+
+
+
+
+
+
+
+Figure 1: My interpretation of what the program is doing
+
+
+The above diagram is how I believe the program is setup and what it is meant to be doing, so that is what I went for when designing and implementing my code changes. At this point I figured that the main events would have to be taking place somewhere that an action or a file is being read, so I started searching through the code that was provided through S3FS to see if I could find anything like that. I spent a good amount of time reading over all of the files located in s3fs-fuse/src and trying my best to understand what was going on, until I eventually found fdcache.cpp, which appeared to be where most of the calls were happening. 
+fdcache.cpp
+	From what I can tell, fdcache is the file that all calls will need to take place in. The first things that jumped out to me in this file are fdEntity::SetAllStatus, fdEntity::Load, and fdManager::open.
+
+Integration
+Mounting the bucket
+	The first major goal for integration was just being able to get my local bucket and Amazon S3 to talk with each other. By following the directions on the s3fs-fuse README I was able to successfully mount the bucket to my local directory. This step took a decent amount of time because I read over the mount code too quickly and was forgetting to add the $ in front of {HOME} and was met with the error “s3fs: specified passwd_file is not readable.”, which thankfully I eventually realized my mistake and the bucket mounted on the first try of correct code.
+ 
+Figure 2: attempting to use incorrect code
+ 
+Figure 3: Correctly mounting the bucket
+Implementing automount
+	Now that the bucket is mounted I can start seeing if my files are transferring correctly. The first thing I do is go over to the bucket directory in the terminal and “echo “testing” > test.txt” to create a test file. When I attempt to view this on Amazon S3, I see that my bucket is not mounted and realize that the bucket does not stay mounted after the operating system is shutdown. Now I went back to the s3fs readme and see that there are instructions for enabling the bucket to mount on startup. However, I was unsuccessful with this step. I’m not sure if I’m missing something, but even though I’m able to see that etc/fstab exists- I am unable to access the directory to create the startup mount, so I needed to manually mount the bucket every time I restarted the operating system. 
+ 
+Figure 4: unable to access etc/fstab
+
+Getting my bucket to talk with S3
+	At this stage, I have successfully gotten my bucket mounted and it is now communicating properly with Amazon S3. At this point I did not have any encryption added to the program.
+ 
+Figure 5: Added testfile.txt to the local bucket
+ 
+Figure 6: testfile.txt is showing up on S3
+ 
+ 
+Figure 7: testfile.txt is encrypted on local, but decrypted on S3
+ 
+ 
+Figure 8: Attempted to modify the file on S3 and see if it would be encrypted on local, it is
+ 
+ 
+Figure 9: Deleting a file takes place on S3 and local
+Implementing the RC4 encryption
+	Having managed to figure out getting the bucket mounted and confirming that the local is communicating with the cloud, I started working on the RC4 encryption. The first step for this was downloading OpenSSL and seeing what kind of files it had. 
+	I started by looking under openssl/crypto/rc4 and found “rc4_enc.c” and “rc4_skey.c”. Neither of these looked exactly like what I was looking for, but I noticed that they both had an include for “openssl/rc4.h” and that is where I found what I needed. This .h file had two calls that I would need to use for my encryption, RC4_set_key and RC4. After finding these, I read the man pages for both as well as reading openssl.org to try to figure out what kind of code I would need to go along with these. 
+	This was much harder of a step than the previous were. Not only did I have extreme difficulty figuring out how to write the RC4 encryption, I had a difficult time merely figuring out where I would need to place a call to my code to get it to work as needed and when needed. To figure this out, I ended up just throwing a bunch of write to file calls in random spots that I thought were right until I was able to find a spot that worked, and that is where I decided my encryption code would need to go. My first attempt at implementing the RC4 kind of worked after much hassle. When I managed to figure out what needed to be added to the RC4 functions, I was successful at getting encryption added to the file, however, it was not overwriting the non-encrypted code. Thankfully this was just a matter of a quick search to see that I needed to add an lseek before reading and writing so that the file would start at the beginning, and not after the text was finished.
+What went wrong?
+	This project was tough. As noted above, I’ve had a different issue every step along the way. Mounting wasn’t cooperating with my incorrect code, I was unable to set up the bucket to automount upon log in, and between my demo and writing this report, my code stopped working properly. While attempting to implement code so that every time any changes are noticed it encrypts, my encryption now always encrypts the local bucket and leaves the Amazon bucket left decrypted. 
+Implementation Details
+During this project, I did not have to add any new files, I merely added to fdcache.cpp.
+New include
+	The first thing that needed to be added to my code was an include for rc4.h so that I could use the rc4 and rc4_set_key functions.
+My code
+	Overall, I feel that the code needed to implement RC4 encryption was not overly difficult. My code is not completely correct, and I did spend many hours trying to add in what I have. The first thing that is needed is a definition for a secret key, I ended up just smashing my hands against the keyboard a few times and called this part good. After the easy part was over, I knew that I had to use the RC4_set_key and RC4 functions. Looking at the man page showed that I would need a *key, a length (that I figured was the length of the key), and then an unsigned char for *indata and *outdata. For the *key I used RC4_KEY and named it as SKEY. For unsigned long len I used sizeof(SECRET_KEY), and then created buffers for the input and the output.
+What exactly does my code do? 
+•	Starting off, I create a variable called inputSize that will be used to hold the size of the input file in bytes. It determines the size by using lseek for the input file (fd) and it reads from the start until the end (SEEK_END). 
+•	Next, I use lseek again to reset the byte counter to the beginning of the input file using SEEK_SET.
+•	Now I created variables for input and output buffering (bufferInput, bufferOutput).
+•	Then I read the file.
+•	Next I create an RC4_KEY variable, SKEY.
+•	Use RC4_set_key and take the SKEY, the size of my secret key, and the secret key to create a key and store it in SKEY.
+•	RC4 takes SKEY, the size of the input file, and the two buffers to encrypt the input using RC4.
+•	I use lseek again here to move the view back to the beginning of the input file
+•	Finally, I write the encrypted hash to the file and then free the buffers.
+Code Changes
+	This is the code that I added to fdcache.cpp to run RC4 encryption.
+#include <openssl/rc4.h>
+//add in rc4.h for rc4 calls in my function - Farr
+using namespace std;
+//------------------------------------------------
+//Start James code
+//------------------------------------------------
+#define SECRET_KEY "s2BTm12A05fz43mifj"
+
+//function to encrypt the files
+int projectEnc(int fd)
+{
+    off_t inputSize = lseek(fd, 0, SEEK_END);
+    //use seek_end to set the offset to the length of the file
+
+    lseek(fd, 0, SEEK_SET);
+    //use lseek to set the offset to the offset bytes
+
+    //set up file buffer buffer
+    unsigned char *bufferInput = (unsigned char*)malloc(inputSize);
+    unsigned char *bufferOutput = (unsigned char*)malloc(inputSize);
+
+    read(fd, bufferInput, inputSize);
+    //read the file with the size and buffer
+
+    RC4_KEY SKEY;
+    //define RC4 key
+
+    RC4_set_key(&SKEY, sizeof(SECRET_KEY), (const unsigned char *) SECRET_KEY);
+    RC4(&SKEY, inputSize, bufferInput, bufferOutput);
+    //set rc4 key and encryption mode from rc4.h file
+
+    lseek(fd, 0, SEEK_SET); 
+    write(fd, bufferOutput, inputSize);   
+    //seek the file for the offsey and write the encryption to the file
+
+    free(bufferInput);
+    free(bufferOutput);
+    //free the buffer for future use
+
+    return 0; 
+}
+//------------------------------------------------
+//End James code
+//------------------------------------------------
+
+
+
+Where I think my call was needed
+	This is where I called my code. I have a few other places in fdcache that I thought could have been where it could go as well that are commented out, but this is where I ended up leaving my call and getting some results.
+int FdEntity::Load(off_t start, size_t size)
+{
+  S3FS_PRN_DBG("[path=%s][fd=%d][offset=%jd][size=%jd]", path.c_str(), fd, (intmax_t)start, (intmax_t)size);
+
+  if(-1 == fd){
+    return -EBADF;
+  }
+  AutoLock auto_lock(&fdent_lock);
+
+  int result = 0;
+
+  // check loaded area & load
+  fdpage_list_t unloaded_list;
+  if(0 < pagelist.GetUnloadedPages(unloaded_list, start, size)){
+    for(fdpage_list_t::iterator iter = unloaded_list.begin(); iter != unloaded_list.end(); ++iter){
+      if(0 != size && static_cast<size_t>(start + size) <= static_cast<size_t>((*iter)->offset)){
+        // reached end
+        break;
+      }
+      // check loading size
+      size_t need_load_size = 0;
+      if(static_cast<size_t>((*iter)->offset) < size_orgmeta){
+        // original file size(on S3) is smaller than request.
+        need_load_size = (static_cast<size_t>((*iter)->next()) <= size_orgmeta ? (*iter)->bytes : (size_orgmeta - (*iter)->offset));
+      }
+      size_t over_size = (*iter)->bytes - need_load_size;
+
+      // download
+      if(static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) <= need_load_size && !nomultipart){ // default 20MB
+        // parallel request
+        // Additional time is needed for large files
+        time_t backup = 0;
+        if(120 > S3fsCurl::GetReadwriteTimeout()){
+          backup = S3fsCurl::SetReadwriteTimeout(120);
+        }
+        result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
+        if(0 != backup){
+          S3fsCurl::SetReadwriteTimeout(backup);
+        }
+      }else{
+        // single request
+        if(0 < need_load_size){
+          S3fsCurl s3fscurl;
+          result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
+        }else{
+          result = 0;
+        }
+      }
+      if(0 != result){
+        break;
+      }
+
+//decryption farr
+      projectEnc(fd);
+      
+      // initialize for the area of over original size
+      if(0 < over_size){
+        if(0 != (result = FdEntity::FillFile(fd, 0, over_size, (*iter)->offset + need_load_size))){
+          S3FS_PRN_ERR("failed to fill rest bytes for fd(%d). errno(%d)", fd, result);
+          break;
+        }
+        // set modify flag
+        is_modify = false;
+      }
+
+
+      // Set loaded flag
+      pagelist.SetPageLoadedStatus((*iter)->offset, static_cast<off_t>((*iter)->bytes), true);
+    }
+    PageList::FreeList(unloaded_list);
+  }
+  return result;
+}
+
+Future Improvement
+	While this project was extremely challenging and taxing on me, I did enjoy going through the process of learning how all of this worked. For every moment of frustration, I had an equal moment of excitement when I managed to get something to cooperate with me. If I had more time, I would have wanted to get this working to a fuller state. Unfortunately, between my other two classes and work, I just did not have the time I would have needed to be able to get this project working properly.
+	Some things I would have wanted to implement would involve the automount. Admittedly, I did not spend a ton of time looking up how to access the etc/fstab directory because I considered that to be a bit more of a low priority item. Having this implemented would have been useful and convenient, but at the end of the day it did not make or break the program.
+	Also, the RC4 encryption. I feel that I am close to figuring out what needs to be done, but with how overwhelming fdcache is as a file, and how thrown together some of it seems to be I just was not able to figure out exactly where my code needed to be called to get the encryption and the decryption to work properly. If I had more time to work on the project, I think that this would be my biggest area of focus. While going through fdcache I did manage to find a few places that I feel could have contained what I needed to use but I was unable to figure out exactly which. 
+Summary
+	I learned quite a bit during this project. Going into this project, I had never dived into many of the main software that was used. S3FS, OpenSSL, and Amazon S3 are all brand new to me. While I still don’t have a very strong understanding on these, I feel that I can at the very least walk my way through the concepts and make use of these three items. I also learned quite a few new commands for getting around the terminal and debugging my software and figuring out issues. I do believe that this is one of the hardest projects I have had to do up to this point in school, but I am glad for it having existed because I did learn quite a bit from it.
